@@ -1,0 +1,70 @@
+---\ Services
+local TweenService = game:GetService("TweenService")
+
+local DefaultVFX = {}
+
+DefaultVFX.Constants = {
+	["Click"] = {
+		TweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out, 0, false, 0),
+		DoesVanish = true,
+	},
+	["MiddleScreenAppear"] = {
+		TweenInfo = TweenInfo.new(0.75, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out, 0, false, 0.2),
+		Duration = 3,
+	},
+	["HoverRotate"] = {
+		TweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out, 0, false, 0),
+		Rotation = 5, -- Reduced for subtlety
+	}, 
+	["UnHoverRotate"] = {
+		TweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, 0, false, 0),
+		Rotation = 0, -- Return to original position
+	},
+	["PopIn"] = {
+		TweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out, 0, false, 0.3),
+	},
+	["FadeIn"] = {
+		TweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, 0, false, 0),
+		Transparency = 0,
+	},
+	["FadeOut"] = {
+		TweenInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In, 0, false, 0),
+		Transparency = 1,
+	},
+	["Pulse"] = {
+		TweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true, 0),
+		Scale = 1.05, -- Subtle pulsing effect
+	},
+	["ShakeEffect"] = {
+		TweenInfo = TweenInfo.new(0.05, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, 5, true, 0),
+		Intensity = 3,
+	}
+}
+
+DefaultVFX.Functions = {
+
+	["VFXPlay"] = function(Model)
+		for _, v in ipairs(Model:GetDescendants()) do
+			if v:IsA("Attachment") then
+
+				for _, v in ipairs(v:GetDescendants()) do
+					if v:IsA("ParticleEmitter") then
+						v:Emit()
+
+					end
+				end
+			end
+		end
+	end,
+	
+	["PlayTween"] = function(UI, Tinfo, Tables)
+		local t = TweenService:Create(UI, Tinfo, Tables)
+			t:Play()
+	end,
+	
+	["OpenLeft"] = function(UI)
+
+	end,
+}
+
+return DefaultVFX
