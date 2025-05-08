@@ -1,0 +1,112 @@
+---\ UI Effects Module
+local UIEffectsModule = {}
+
+---\ State
+local buttonStates = {
+	shopButtonExpanded = true,
+	exitButtonFlipped = true,
+	buyButtonFlipped = true
+}
+
+local function setupShopButtons(scrollingShop, effectModule)
+	for _, v in ipairs(scrollingShop:GetDescendants()) do
+		if not v:IsA("TextButton") then continue end
+
+		v.MouseButton1Up:Connect(function()
+			if buttonStates.shopButtonExpanded then
+				effectModule.Functions.PlayTween(v.Parent, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(.26, .22)})
+			else
+				effectModule.Functions.PlayTween(v.Parent, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(.25, .2)})
+			end
+			buttonStates.shopButtonExpanded = not buttonStates.shopButtonExpanded
+		end)
+
+		v.MouseEnter:Connect(function()
+			effectModule.Functions.PlayTween(v.Parent, effectModule.Constants.Click.TweenInfo, {Rotation = 20})
+		end)
+
+		v.MouseLeave:Connect(function()
+			effectModule.Functions.PlayTween(v.Parent, effectModule.Constants.Click.TweenInfo, {Rotation = 0})
+		end)
+	end
+end
+
+local function setupAddButton(addButton, effectModule)
+	addButton.MouseButton1Up:Connect(function()
+		effectModule.Functions.PlayTween(addButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.09, 0.10)})
+		effectModule.Functions.PlayTween(addButton, effectModule.Constants.HoverRotate.TweenInfo, {Rotation = 5})
+
+		task.wait(.2)
+
+		effectModule.Functions.PlayTween(addButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.06, 0.098)})
+		effectModule.Functions.PlayTween(addButton, effectModule.Constants.HoverRotate.TweenInfo, {Rotation = 0})
+	end)
+end
+
+local function setupSubtractButton(subtractButton, effectModule)
+	subtractButton.MouseButton1Up:Connect(function()
+		effectModule.Functions.PlayTween(subtractButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.09, 0.10)})
+		effectModule.Functions.PlayTween(subtractButton, effectModule.Constants.HoverRotate.TweenInfo, {Rotation = -5})
+
+		task.wait(.2)
+
+		effectModule.Functions.PlayTween(subtractButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.06, 0.098)})
+		effectModule.Functions.PlayTween(subtractButton, effectModule.Constants.HoverRotate.TweenInfo, {Rotation = 0})
+	end)
+end
+
+local function setupExitButton(exitButton, effectModule)
+	exitButton.MouseEnter:Connect(function()
+		effectModule.Functions.PlayTween(exitButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.3, 0.08)})
+
+		local rotation = buttonStates.exitButtonFlipped and 10 or -10
+		effectModule.Functions.PlayTween(exitButton, effectModule.Constants.Click.TweenInfo, {Rotation = rotation})
+		buttonStates.exitButtonFlipped = not buttonStates.exitButtonFlipped
+	end)
+
+	exitButton.MouseLeave:Connect(function()
+		effectModule.Functions.PlayTween(exitButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.2, 0.08)})
+		effectModule.Functions.PlayTween(exitButton, effectModule.Constants.Click.TweenInfo, {Rotation = 0})
+	end)
+end
+
+local function setupBuyButton(buyButton, effectModule)
+	buyButton.MouseEnter:Connect(function()
+		effectModule.Functions.PlayTween(buyButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.08, 0.09)})
+
+		local rotation = buttonStates.buyButtonFlipped and 10 or 13
+		effectModule.Functions.PlayTween(buyButton, effectModule.Constants.Click.TweenInfo, {Rotation = rotation})
+		buttonStates.buyButtonFlipped = not buttonStates.buyButtonFlipped
+	end)
+
+	buyButton.MouseLeave:Connect(function()
+		effectModule.Functions.PlayTween(buyButton, effectModule.Constants.Click.TweenInfo, {Size = UDim2.fromScale(0.06, 0.07)})
+		effectModule.Functions.PlayTween(buyButton, effectModule.Constants.Click.TweenInfo, {Rotation = 5})
+	end)
+end
+
+function UIEffectsModule.Init(mainFrame)
+	local RS = game:GetService("ReplicatedStorage")
+	local effectModule = require(RS.EffectsModules)
+
+	local addButton = mainFrame.Add
+	local subtractButton = mainFrame.Subtract
+	local exitButton = mainFrame.Exit
+	local buyButton = mainFrame.Buy
+	local shopFrame = mainFrame.ShopFrame
+	local scrollingShop = shopFrame.ScrollingFrame
+
+	setupShopButtons(scrollingShop, effectModule)
+	setupAddButton(addButton, effectModule)
+	setupSubtractButton(subtractButton, effectModule)
+	setupExitButton(exitButton, effectModule)
+	setupBuyButton(buyButton, effectModule)
+end
+
+function UIEffectsModule.ResetStates()
+	buttonStates.shopButtonExpanded = true
+	buttonStates.exitButtonFlipped = true
+	buttonStates.buyButtonFlipped = true
+end
+
+return UIEffectsModule
