@@ -1,0 +1,68 @@
+---\ StateMachine Module
+local StateMachine = {}
+StateMachine.__index = StateMachine
+
+function StateMachine.new()
+	local self = setmetatable({}, StateMachine)
+	self.states = {}
+	self.currentState = nil
+	self.previousState = nil
+	self.stateTime = 0
+	self.stateData = {}
+	return self
+end
+
+function StateMachine:AddState(stateName, stateTable)
+	if type(stateName) ~= "string" then return end
+
+	self.states[stateName] = {
+		name = stateName,
+		onEnter = stateTable.Enter or stateTable.onEnter,
+		onUpdate = stateTable.Update or stateTable.onUpdate,
+		onExit = stateTable.Exit or stateTable.onExit,
+	}
+	return self
+end
+
+function StateMachine:SetState(stateName)
+	if not self.states[stateName] then return self end
+
+	-- Exit current state
+	if self.currentState and self.states[self.currentState] then
+		self.states[self.currentState].onExit(self)
+	end
+
+	-- Update tracking and enter new state
+	self.previousState = self.currentState
+	self.currentState = stateName
+	self.stateTime = 0
+	self.states[stateName].onEnter(self)
+
+	return self
+end
+
+function StateMachine:Initialize(stateName)
+	return self:SetState(stateName)
+end
+
+function StateMachine:Update(deltaTime)
+	deltaTime = deltaTime or 0.016
+	self.stateTime += deltaTime
+
+	if self.currentState and self.states[self.currentState] then
+		self.states[self.currentState].onUpdate(self, deltaTime)
+	end
+
+	return self
+end
+
+function StateMachine:SetData(key, value)
+	self.stateData[key] = value
+	return self
+end
+
+function StateMachine:GetData(key)
+	return self.stateData[key]
+end
+
+return StateMachine
