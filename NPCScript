@@ -1,0 +1,445 @@
+---\ Service
+local PathFindingServices = game:GetService("PathfindingService")
+local RS = game:GetService("ReplicatedStorage")
+
+---\ Modules
+local StateMachine = require(script.ModuleScript)
+
+---/\ References
+local ShopPos = workspace.ShopPos
+local MoneyPos = workspace.MoneyPos
+local RestockPos = workspace.RestockPos
+local Resources = workspace.Resources
+local CoinsValue = Resources.MoneyForNpc.Value
+local IngredientFolder = Resources.IngredientList.Ingredient
+
+---\ Pathfinding Config
+local Paths = PathFindingServices:CreatePath({
+	agentCanJump = true,
+	agentCanClimb = true,
+	WaypointSpacing = 5,
+	agentRadius = 2
+})
+local Ways = {}
+
+---\ Npc
+local NPC = script.Parent
+local HRP = NPC.HumanoidRootPart
+local Humanoid = NPC.Humanoid
+local MAX_COINS_Constant = 300
+local CurrentCoins = 0
+local CurrentBoxs = 0
+local IngredientAmountToBuy = 20
+local StuckTimer = 2
+local BuyList = {
+	"Apple", "Egg", "Carrot"
+}
+local Basket = {}
+local Buying = {}
+local waitingForCoins = false
+local coinChangeConnection = nil
+
+---/\ Cooldown
+local GetCoinsCooldown_Constant = 3
+local BuyItemCooldown_Constant = 2
+local RestockingCooldown_Constant = 4
+
+local function findPath(Position)
+	local maxAttempt = 3
+	local currentattempt = 0
+	Ways = {}
+
+	local success = false
+	local errorMsg = nil
+
+	repeat
+		success, errorMsg = pcall(function()
+			Paths:ComputeAsync(HRP.Position, Position) 
+		end)
+
+		currentattempt += 1
+		if not success then
+			warn("Path finding failed: " .. tostring(errorMsg))
+			task.wait(0.5)
+		end
+	until success or currentattempt >= maxAttempt
+
+	if success then
+		local waypoints = Paths:GetWaypoints()
+		if #waypoints > 0 then
+			for _, Way in pairs(waypoints) do
+				table.insert(Ways, Way.Position)
+				local part = Instance.new("Part")
+				part.Shape = Enum.PartType.Ball
+				part.Parent = workspace
+				part.CanCollide = false
+				part.Anchored = true
+				part.Material = Enum.Material.Neon
+				part.Position = Way.Position
+			end
+			return true
+		else
+			warn("No waypoints returned")
+			return false
+		end
+	else
+		warn("Failed to find path after " .. maxAttempt .. " attempts")
+		return false
+	end
+end
+
+local function WalkThroughPath(stateMachine)
+	for i, w in pairs(Ways) do
+		Humanoid:MoveTo(w)
+
+		local moveStartTime = tick()
+		local moveFinished = false
+
+		local connection = Humanoid.MoveToFinished:Connect(function()
+			moveFinished = true
+		end)
+
+		while not moveFinished do
+			if tick() - moveStartTime > StuckTimer and HRP.AssemblyLinearVelocity.Magnitude <= 3 then
+				local randomWay = Vector3.new(math.random(-10, 10) + w.X, w.Y, math.random(-10, 10) + w.Z)
+				Humanoid:MoveTo(randomWay)
+				task.wait(1)
+				Humanoid:MoveTo(w)
+				moveStartTime = tick()
+			end
+			task.wait(0.001)
+		end
+
+		connection:Disconnect()
+	end
+
+	for _, part in pairs(workspace:GetChildren()) do
+		if part:IsA("Part") and part.Shape == Enum.PartType.Ball then
+			part:Destroy()
+		end
+	end
+
+	return true
+end
+
+local function BoxCalc(itemList, boxCapacity)
+	local groupedItems = {}
+	for _, item in ipairs(itemList) do
+		groupedItems[item] = (groupedItems[item] or 0) + 1
+	end
+
+	local totalItems = 0
+	for _, count in pairs(groupedItems) do
+		totalItems += count
+	end
+
+	local boxesNeeded = math.ceil(totalItems / boxCapacity)
+	local itemsPerBox = {}
+	local currentBox = 1
+	local currentCount = 0
+
+	for item, count in pairs(groupedItems) do
+		local remaining = count
+		while remaining > 0 do
+			if not itemsPerBox[currentBox] then
+				itemsPerBox[currentBox] = {}
+			end
+
+			local spaceInBox = boxCapacity - currentCount
+			local toAdd = math.min(remaining, spaceInBox)
+
+			itemsPerBox[currentBox][item] = (itemsPerBox[currentBox][item] or 0) + toAdd
+			remaining -= toAdd
+			currentCount += toAdd
+
+			if currentCount >= boxCapacity then
+				currentBox += 1
+				currentCount = 0
+			end
+		end
+	end
+
+	for i = 1, boxesNeeded do
+		local box = RS.Box:Clone()
+		box.Name = "ItemBox_" .. i
+		box.Anchored = false
+		box.CanCollide = true
+		box.BrickColor = BrickColor.new("Brown")
+		box.ProximityPrompt:Destroy()
+
+		if itemsPerBox[i] then
+			for item, count in pairs(itemsPerBox[i]) do
+				box:SetAttribute(item, count)
+			end
+		end
+
+		box.Parent = workspace
+
+		if i == 1 then
+			local boxPosition = NPC.Torso.Position + NPC.Torso.CFrame.LookVector * 2.3
+			box.CFrame = CFrame.new(boxPosition)
+		else
+			local boxPosition = NPC.Torso.Position + Vector3.new(0, 3 * i - 3, 0) + NPC.Torso.CFrame.LookVector * 2.3
+			box.CFrame = CFrame.new(boxPosition)
+		end
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = HRP
+		weld.Part1 = box
+		weld.Parent = HRP
+	end
+
+	return boxesNeeded
+end
+
+---/\ Initializing States
+local RestockerNpc = StateMachine.new()
+
+RestockerNpc:AddState("WaitingCoins", {
+	Enter = function(self)
+		print("Entered WaitingCoins state")
+		waitingForCoins = false
+
+		if coinChangeConnection then
+			coinChangeConnection:Disconnect()
+			coinChangeConnection = nil
+		end
+
+		waitingForCoins = true
+		coinChangeConnection = CoinsValue.Changed:Connect(function()
+			if CoinsValue.Value > 0 and waitingForCoins then
+				waitingForCoins = false
+				if coinChangeConnection then
+					coinChangeConnection:Disconnect()
+					coinChangeConnection = nil
+				end
+				self:SetState("GetCoins")
+			end
+		end)
+
+		if CoinsValue.Value > 0 then
+			self:SetState("GetCoins")
+		else
+			print("Waiting for coins")
+		end
+	end,
+
+	Update = function(self, deltaTime)
+		-- Just waiting for Changed event
+	end,
+
+	Exit = function(self)
+		if coinChangeConnection then
+			coinChangeConnection:Disconnect()
+			coinChangeConnection = nil
+		end
+		waitingForCoins = false
+	end
+})
+
+RestockerNpc:AddState("GetCoins", {
+	Enter = function(self)
+		print("Entered GetCoins state")
+
+		if findPath(MoneyPos.Position) then
+			self:SetData("pathFound", true)
+		else
+			self:SetData("pathFound", false)
+			print("Failed to find path to money position")
+			task.wait(1)
+			self:SetState("WaitingCoins")
+		end
+	end,
+
+	Update = function(self, deltaTime)
+		if not self:GetData("pathFound") or self:GetData("walking") then return end
+
+		self:SetData("walking", true)
+
+		task.spawn(function()
+			local success = WalkThroughPath(self)
+
+			if success and (HRP.Position - MoneyPos.Position).Magnitude <= 4 then
+				print("Taking Coins")
+				task.wait(GetCoinsCooldown_Constant)
+				local coinsToTake = math.clamp(CoinsValue.Value, 0, MAX_COINS_Constant - CurrentCoins)
+				CurrentCoins += coinsToTake
+				CoinsValue.Value -= coinsToTake
+				print("Coins collected:", CurrentCoins)
+
+				if self.currentState == "GetCoins" then 
+					if CurrentCoins > 0 and CurrentBoxs == 0 then
+						self:SetState("BuyItems")
+					else
+						self:SetState("WaitingCoins")
+					end
+				end
+			else
+				print("Failed to reach money position")
+				self:SetState("WaitingCoins")
+			end
+		end)
+	end,
+
+	Exit = function(self)
+		self:SetData("pathFound", nil)
+		self:SetData("walking", nil)
+	end
+})
+
+RestockerNpc:AddState("BuyItems", {
+	Enter = function(self)
+		print("Entered BuyItems state")
+
+		if findPath(ShopPos.Position) then
+			self:SetData("pathFound", true)
+		else
+			self:SetData("pathFound", false)
+			print("Failed to find path to shop")
+			self:SetState("WaitingCoins")
+		end
+	end,
+
+	Update = function(self, deltaTime)
+		if not self:GetData("pathFound") or self:GetData("walking") then return end
+
+		self:SetData("walking", true)
+
+		task.spawn(function()
+			local success = WalkThroughPath(self)
+
+			if success and (HRP.Position - ShopPos.Position).Magnitude <= 4 then
+				print("Buying items...")
+
+				Basket = {}
+				Buying = {}
+
+				for i = 1, IngredientAmountToBuy do
+					local pick = math.random(1, #BuyList)
+					table.insert(Basket, BuyList[pick])
+				end
+
+				print("Items in basket: " .. #Basket)
+
+				local i = 1
+				while i <= #Basket do
+					local itemName = Basket[i]
+					local priceObjectName = itemName .. "Price"
+					local priceObject = RS.Ingredient:FindFirstChild(priceObjectName)
+
+					if priceObject then
+						if CurrentCoins < priceObject.Value then
+							print("No more money")
+							Basket = {}
+							break
+						else
+							CurrentCoins -= priceObject.Value
+							table.insert(Buying, itemName)
+							table.remove(Basket, i)
+						end
+					else
+						print("Price not found for: " .. itemName)
+						i += 1
+					end
+				end
+
+				if #Buying > 0 then
+					task.wait(BuyItemCooldown_Constant)
+					local boxCount = BoxCalc(Buying, 10)
+					CurrentBoxs = boxCount
+
+					if self.currentState == "BuyItems" then
+						if CurrentBoxs > 0 then
+							self:SetState("Restock")
+						else
+							self:SetState("WaitingCoins")
+						end
+					end
+				else
+					print("Nothing was bought")
+					self:SetState("WaitingCoins")
+				end
+			else
+				print("Failed to reach shop")
+				self:SetState("WaitingCoins")
+			end
+		end)
+	end,
+
+	Exit = function(self)
+		self:SetData("pathFound", nil)
+		self:SetData("walking", nil)
+	end
+})
+
+RestockerNpc:AddState("Restock", {
+	Enter = function(self)
+		print("Entered Restock state")
+
+		if findPath(RestockPos.Position) then
+			self:SetData("pathFound", true)
+		else
+			self:SetData("pathFound", false)
+			print("Failed to find path to restock position")
+			self:SetState("WaitingCoins")
+		end
+	end,
+
+	Update = function(self, deltaTime)
+		if not self:GetData("pathFound") or self:GetData("walking") then return end
+
+		self:SetData("walking", true)
+
+		task.spawn(function()
+			local success = WalkThroughPath(self)
+
+			if success and (HRP.Position - RestockPos.Position).Magnitude <= 4 then
+				print("Restocking items...")
+				task.wait(RestockingCooldown_Constant)
+
+				for _, box in pairs(workspace:GetChildren()) do
+					if box.Name:match("ItemBox_") then
+						for itemName, count in pairs(box:GetAttributes()) do
+							local ingredient = IngredientFolder:FindFirstChild(itemName)
+							if ingredient then
+								ingredient.Value += count
+								print("Added " .. count .. " " .. itemName .. " to inventory")
+							end
+						end
+
+						box:Destroy()
+					end
+				end
+
+				CurrentBoxs = 0
+				print("Restocking complete!")
+
+				if self.currentState == "Restock" then
+					if CurrentCoins < 10 then
+						self:SetState("GetCoins")
+					else
+						self:SetState("BuyItems")
+					end
+				end
+			else
+				print("Failed to reach restock position")
+				self:SetState("WaitingCoins")
+			end
+		end)
+	end,
+
+	Exit = function(self)
+		self:SetData("pathFound", nil)
+		self:SetData("walking", nil)
+	end
+})
+
+RestockerNpc:Initialize("WaitingCoins")
+
+local function Update()
+	while true do
+		RestockerNpc:Update(task.wait())
+	end
+end
+
+task.spawn(Update)
