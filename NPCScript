@@ -18,7 +18,7 @@ local Paths = PathFindingServices:CreatePath({
 	agentCanJump = true,
 	agentCanClimb = true,
 	WaypointSpacing = 5,
-	agentRadius = 2
+	agentRadius = 3
 })
 local Ways = {}
 
@@ -105,6 +105,7 @@ local function WalkThroughPath(stateMachine)
 				Humanoid:MoveTo(randomWay)
 				task.wait(1)
 				Humanoid:MoveTo(w)
+				print("ya")
 				moveStartTime = tick()
 			end
 			task.wait(0.001)
@@ -229,11 +230,12 @@ RestockerNpc:AddState("WaitingCoins", {
 	end,
 
 	Exit = function(self)
-		if coinChangeConnection then
-			coinChangeConnection:Disconnect()
-			coinChangeConnection = nil
+		self:SetData("pathFound", nil)
+		self:SetData("walking", nil)
+		if self.currentTask then
+			task.cancel(self.currentTask)
+			self.currentTask = nil
 		end
-		waitingForCoins = false
 	end
 })
 
@@ -284,6 +286,10 @@ RestockerNpc:AddState("GetCoins", {
 	Exit = function(self)
 		self:SetData("pathFound", nil)
 		self:SetData("walking", nil)
+		if self.currentTask then
+			task.cancel(self.currentTask)
+			self.currentTask = nil
+		end
 	end
 })
 
@@ -369,6 +375,10 @@ RestockerNpc:AddState("BuyItems", {
 	Exit = function(self)
 		self:SetData("pathFound", nil)
 		self:SetData("walking", nil)
+		if self.currentTask then
+			task.cancel(self.currentTask)
+			self.currentTask = nil
+		end
 	end
 })
 
@@ -431,6 +441,10 @@ RestockerNpc:AddState("Restock", {
 	Exit = function(self)
 		self:SetData("pathFound", nil)
 		self:SetData("walking", nil)
+		if self.currentTask then
+			task.cancel(self.currentTask)
+			self.currentTask = nil
+		end
 	end
 })
 
