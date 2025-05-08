@@ -1,0 +1,30 @@
+local ShoppingCart = script.Parent.Parent
+local Proximity = ShoppingCart.ProximityPrompt
+local IngredientFolder = ShoppingCart.Parent.IngredientList.Ingredient
+
+local function Distributes(attributes)
+	local itemName = attributes["ItemName"]
+	local amount = attributes["Amount"]
+
+	if not itemName or not amount then return end
+
+	for _, item in pairs(IngredientFolder:GetChildren()) do
+		if item.Name == itemName then
+			item.Value += amount
+			break
+		end
+	end
+end
+
+Proximity.PromptButtonHoldEnded:Connect(function(plr)
+	if not plr.Character:FindFirstChild("Box") then return end
+	
+	for i, v in ipairs(plr.Character:GetChildren()) do
+		if v.Name == "Box" then
+			local attributes = v:GetAttributes()
+	v:Destroy()
+	Distributes(attributes)
+		end
+	end
+	
+end)
