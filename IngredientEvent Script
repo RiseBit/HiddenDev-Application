@@ -1,0 +1,21 @@
+local IngredList = script.Parent
+local IngredientFolder = IngredList.Ingredient
+local SurfaceUI = IngredList.SurfaceGui
+local ScrollFrame = SurfaceUI.ScrollingFrame
+local textLabel = IngredList.TextLabel
+
+for i, v in ipairs(IngredientFolder:GetChildren()) do
+	if not ScrollFrame:FindFirstChild(v.Name) then
+		local clonedText = textLabel:Clone()
+		clonedText.Name = v.Name 
+		clonedText.Parent = ScrollFrame
+		clonedText.Text = v.Name..":  "..v.Value.."X"
+	end
+end
+
+for i, v in ipairs(IngredientFolder:GetChildren()) do
+	local textlabel = ScrollFrame:FindFirstChild(v.Name)
+	v.Changed:Connect(function()
+		textlabel.Text = v.Name..":  "..v.Value.."X" 
+	end)
+end
